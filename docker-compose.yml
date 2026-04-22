@@ -1,0 +1,43 @@
+version: '3.8'
+
+services:
+  # MongoDB
+  mongodb:
+    image: mongo:7.0
+    container_name: vks-mongodb
+    restart: always
+    ports:
+      - "27017:27017"
+    volumes:
+      - mongodb_data:/data/db
+    environment:
+      - MONGO_INITDB_DATABASE=vks_ai_platform
+    networks:
+      - vks-network
+
+  # VKS AI Platform API
+  api:
+    build: .
+    container_name: vks-api
+    restart: always
+    ports:
+      - "8000:8000"
+    environment:
+      - MONGODB_URI=mongodb://mongodb:27017
+      - MONGODB_DB=vks_ai_platform
+      - OLLAMA_BASE_URL=http://host.docker.internal:11434
+      - DEFAULT_MODEL=qwen3:30b-a3b
+      - ADMIN_USERNAME=admin
+      - ADMIN_PASSWORD=vks@2024
+      - SECRET_KEY=change-this-to-random-secret
+    depends_on:
+      - mongodb
+    networks:
+      - vks-network
+
+volumes:
+  mongodb_data:
+
+networks:
+  vks-network:
+    driver: bridge

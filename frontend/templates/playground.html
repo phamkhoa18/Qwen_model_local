@@ -1,0 +1,272 @@
+<!DOCTYPE html>
+<html lang="vi">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>{{ app_name }} - AI Playground</title>
+  <meta name="description" content="Hệ thống AI Local cho Viện Kiểm Sát Nhân Dân Việt Nam">
+  <link rel="stylesheet" href="/static/css/styles.css">
+  <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏛️</text></svg>">
+</head>
+<body>
+
+<!-- ===== TOAST ===== -->
+<div id="toast-container" class="toast-container"></div>
+
+<!-- ===== LOGIN SCREEN ===== -->
+<div id="login-screen" class="login-container" style="display:none;">
+  <div class="login-card">
+    <div style="text-align:center;font-size:48px;margin-bottom:16px;">🏛️</div>
+    <h2>{{ app_name }}</h2>
+    <p class="subtitle">Đăng nhập để quản trị hệ thống</p>
+    <form id="login-form">
+      <div class="form-group">
+        <label for="login-username">Tên đăng nhập</label>
+        <input type="text" id="login-username" placeholder="admin" autocomplete="username" required>
+      </div>
+      <div class="form-group">
+        <label for="login-password">Mật khẩu</label>
+        <input type="password" id="login-password" placeholder="••••••••" autocomplete="current-password" required>
+      </div>
+      <div id="login-error" class="form-error"></div>
+      <button type="submit" class="btn btn-primary" style="width:100%;justify-content:center;margin-top:8px;">Đăng nhập</button>
+    </form>
+  </div>
+</div>
+
+<!-- ===== APP SCREEN ===== -->
+<div id="app-screen" class="app-container" style="display:none;">
+
+  <!-- Sidebar -->
+  <aside class="sidebar">
+    <div class="sidebar-header">
+      <div class="logo">⚖️</div>
+      <div>
+        <h1>{{ app_name }}</h1>
+        <span class="version">v{{ version }}</span>
+      </div>
+    </div>
+
+    <nav class="sidebar-nav">
+      <div class="nav-section">
+        <div class="nav-section-title">Công cụ</div>
+        <a class="nav-item active" data-page="chat" onclick="navigateTo('chat')">
+          <span class="icon">💬</span> Chat Playground
+        </a>
+        <a class="nav-item" data-page="docs" onclick="navigateTo('docs')">
+          <span class="icon">📚</span> API Docs
+        </a>
+      </div>
+
+      <div class="nav-section">
+        <div class="nav-section-title">Quản trị</div>
+        <a class="nav-item" data-page="keys" onclick="navigateTo('keys')">
+          <span class="icon">🔑</span> API Keys
+        </a>
+        <a class="nav-item" data-page="usage" onclick="navigateTo('usage')">
+          <span class="icon">📊</span> Thống kê
+        </a>
+      </div>
+    </nav>
+
+    <!-- Settings -->
+    <div class="settings-panel">
+      <div class="setting-group">
+        <label>Model</label>
+        <select id="model-select" onchange="updateSetting('model', this.value)">
+          <option value="{{ default_model }}">{{ default_model }}</option>
+        </select>
+      </div>
+      <div class="setting-group">
+        <label>Temperature</label>
+        <div class="range-wrapper">
+          <input type="range" min="0" max="2" step="0.1" value="0.3" onchange="updateSetting('temperature', this.value)" oninput="document.getElementById('temperature-value').textContent=this.value">
+          <span class="range-value" id="temperature-value">0.3</span>
+        </div>
+      </div>
+      <div class="setting-group">
+        <label>Max Tokens</label>
+        <input type="number" value="4096" min="1" max="32768" onchange="updateSetting('maxTokens', this.value)">
+      </div>
+      <div class="setting-group">
+        <label>System Prompt</label>
+        <textarea class="system-prompt-area" id="system-prompt" onchange="updateSetting('systemPrompt', this.value)">Bạn là "Trợ lý Pháp luật VKS" - hệ thống AI hỗ trợ cán bộ Viện kiểm sát nhân dân Việt Nam. Chỉ trích dẫn điều luật cụ thể, không bịa. Sử dụng tiếng Việt pháp lý chuyên nghiệp.</textarea>
+      </div>
+      <div class="setting-group">
+        <label style="display:flex;align-items:center;gap:8px;">
+          <input type="checkbox" checked onchange="updateSetting('stream', this.checked)"> Streaming
+        </label>
+      </div>
+      <button class="btn btn-secondary btn-sm" style="width:100%;" onclick="logout()">🚪 Đăng xuất</button>
+    </div>
+  </aside>
+
+  <!-- Main Content -->
+  <main class="main-content">
+    <!-- Top Bar -->
+    <div class="top-bar">
+      <div class="top-bar-left">
+        <h2>🏛️ VKS AI</h2>
+        <div id="status-badge" class="status-badge offline">
+          <span class="status-dot"></span> Checking...
+        </div>
+      </div>
+      <div class="top-bar-right">
+        <button class="btn btn-secondary btn-sm" onclick="clearChat()">🗑️ Xóa chat</button>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: CHAT ===== -->
+    <div id="page-chat" class="page active">
+      <div class="chat-container" id="chat-messages">
+        <div id="empty-state" class="empty-state">
+          <div class="icon-large">⚖️</div>
+          <h3>Trợ Lý Pháp Luật VKS</h3>
+          <p>Hỏi bất kỳ câu hỏi pháp luật nào. Hệ thống sẽ trả lời dựa trên Bộ luật Hình sự, Tố tụng Hình sự và các văn bản pháp luật Việt Nam.</p>
+          <div class="suggestions">
+            <span class="suggestion-chip" onclick="useSuggestion('Giải thích tội trộm cắp tài sản theo Điều 173 BLHS 2015')">📋 Điều 173 BLHS 2015</span>
+            <span class="suggestion-chip" onclick="useSuggestion('So sánh tội cướp tài sản và cưỡng đoạt tài sản')">⚖️ So sánh tội danh</span>
+            <span class="suggestion-chip" onclick="useSuggestion('Quy trình khởi tố vụ án hình sự gồm những bước nào?')">📝 Quy trình khởi tố</span>
+            <span class="suggestion-chip" onclick="useSuggestion('Viện kiểm sát có thẩm quyền gì trong giai đoạn điều tra?')">🏛️ Thẩm quyền VKS</span>
+          </div>
+        </div>
+      </div>
+
+      <div class="input-area">
+        <div class="input-wrapper">
+          <textarea id="chat-input" rows="1" placeholder="Nhập câu hỏi pháp luật... (Enter để gửi, Shift+Enter xuống dòng)"></textarea>
+          <button id="send-btn" class="send-btn" onclick="sendMessage()">➤</button>
+        </div>
+        <div class="input-footer">
+          <span>Kết quả chỉ mang tính tham khảo, không thay thế ý kiến pháp lý chính thức.</span>
+          <span>Thêm /think vào cuối câu hỏi để bật chế độ suy luận sâu</span>
+        </div>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: API KEYS ===== -->
+    <div id="page-keys" class="page">
+      <div class="page-content">
+        <div class="page-header" style="display:flex;justify-content:space-between;align-items:flex-start;">
+          <div>
+            <h2>🔑 Quản lý API Keys</h2>
+            <p>Tạo và quản lý API keys để sử dụng API từ bên ngoài.</p>
+          </div>
+          <button class="btn btn-primary" onclick="openModal('create-key-modal')">+ Tạo Key Mới</button>
+        </div>
+
+        <table class="keys-table">
+          <thead>
+            <tr>
+              <th>Tên</th>
+              <th>Key</th>
+              <th>Trạng thái</th>
+              <th>Requests</th>
+              <th>Lần cuối sử dụng</th>
+              <th>Hành động</th>
+            </tr>
+          </thead>
+          <tbody id="keys-tbody">
+            <tr><td colspan="6" style="text-align:center;color:var(--text-muted);padding:40px;">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: USAGE ===== -->
+    <div id="page-usage" class="page">
+      <div class="page-content">
+        <div class="page-header">
+          <h2>📊 Thống Kê Sử Dụng</h2>
+          <p>Theo dõi lượng sử dụng API và hiệu suất hệ thống.</p>
+        </div>
+
+        <div class="stats-grid">
+          <div class="stat-card">
+            <div class="stat-label">Tổng Requests</div>
+            <div class="stat-value" id="stat-total-requests">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Tổng Tokens</div>
+            <div class="stat-value" id="stat-total-tokens">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Requests Hôm Nay</div>
+            <div class="stat-value" id="stat-today-requests">0</div>
+          </div>
+          <div class="stat-card">
+            <div class="stat-label">Thời Gian TB</div>
+            <div class="stat-value" id="stat-avg-response">0ms</div>
+          </div>
+        </div>
+
+        <h3 style="margin-bottom:12px;">Thống kê theo API Key</h3>
+        <table class="keys-table">
+          <thead><tr><th>API Key</th><th>Requests</th><th>Tokens</th></tr></thead>
+          <tbody id="key-stats-tbody">
+            <tr><td colspan="3" style="text-align:center;color:var(--text-muted)">Đang tải...</td></tr>
+          </tbody>
+        </table>
+      </div>
+    </div>
+
+    <!-- ===== PAGE: DOCS ===== -->
+    <div id="page-docs" class="page">
+      <div class="page-content" id="docs-content">
+        <!-- Rendered by JS -->
+      </div>
+    </div>
+
+  </main>
+</div>
+
+<!-- ===== MODAL: CREATE KEY ===== -->
+<div id="create-key-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('create-key-modal')">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>🔑 Tạo API Key Mới</h3>
+      <button class="modal-close" onclick="closeModal('create-key-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div class="form-group">
+        <label>Tên API Key *</label>
+        <input type="text" id="new-key-name" placeholder="VD: Chatbot VKS Hà Nội">
+      </div>
+      <div class="form-group">
+        <label>Mô tả</label>
+        <input type="text" id="new-key-desc" placeholder="VD: Key cho hệ thống chatbot nội bộ">
+      </div>
+      <div class="form-group">
+        <label>Rate Limit (requests/phút)</label>
+        <input type="number" id="new-key-rate" value="30" min="1" max="1000">
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-secondary" onclick="closeModal('create-key-modal')">Hủy</button>
+      <button class="btn btn-primary" onclick="createApiKey()">Tạo Key</button>
+    </div>
+  </div>
+</div>
+
+<!-- ===== MODAL: SHOW NEW KEY ===== -->
+<div id="show-key-modal" class="modal-overlay hidden" onclick="if(event.target===this)closeModal('show-key-modal')">
+  <div class="modal">
+    <div class="modal-header">
+      <h3>✅ API Key Đã Tạo</h3>
+      <button class="modal-close" onclick="closeModal('show-key-modal')">&times;</button>
+    </div>
+    <div class="modal-body">
+      <div style="background:rgba(234,179,8,0.1);border:1px solid rgba(234,179,8,0.3);border-radius:var(--radius-sm);padding:12px;margin-bottom:16px;color:var(--yellow);font-size:13px;">
+        ⚠️ <strong>Quan trọng:</strong> Hãy copy key này ngay. Bạn sẽ không thể xem lại key sau khi đóng dialog này.
+      </div>
+      <div style="background:var(--bg-tertiary);border:1px solid var(--border);border-radius:var(--radius-sm);padding:14px;font-family:'JetBrains Mono',monospace;font-size:13px;word-break:break-all;color:var(--accent-hover);" id="new-key-value"></div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-primary" onclick="copyKey('new-key-value');closeModal('show-key-modal')">📋 Copy & Đóng</button>
+    </div>
+  </div>
+</div>
+
+<script src="/static/js/app.js"></script>
+</body>
+</html>
